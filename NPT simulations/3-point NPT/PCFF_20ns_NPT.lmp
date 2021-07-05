@@ -1,0 +1,40 @@
+units		real
+boundary p p p
+
+atom_style	full
+bond_style	class2
+angle_style     class2
+
+pair_style	lj/class2/coul/long 12.5 12.5
+
+variable basename string PCFF
+variable time string 0-20ns
+variable TK equal 298.15  # Set molecule temp
+variable PBAR equal 1.0  # Set pressure
+
+#read_data	${basename}.lammpsdata
+read_restart    restart.${basename}.5000000
+
+pair_modify     tail yes mix sixthpower
+kspace_style pppm 1.0e-6
+
+neighbor 2.0 bin
+neigh_modify    delay 0 every 1 check yes one 11330 page 200000
+timestep 1.0
+
+##Computes
+group WAT_O type 1
+compute O_msd WAT_O msd com yes 
+
+##Thermodyanamic Output
+thermo_style custom step ke pe etotal press vol temp density c_O_msd[4]
+thermo 10000                                            # Frequency of Thermodynamic Output
+thermo_modify flush yes
+
+## Data collection section
+dump 2 all custom 10000 ${basename}_${time}.lammpstrj id x y z ix iy iz
+fix 4 all npt temp ${TK} ${TK} 100 iso ${PBAR} ${PBAR} 1000
+restart 500000 restart.${basename}
+log log_${basename}_${time}.lammps
+run 20000000
+ 
