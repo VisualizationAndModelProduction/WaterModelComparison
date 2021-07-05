@@ -1,0 +1,66 @@
+units		real
+boundary p p p
+
+atom_style	full
+bond_style      harmonic
+angle_style     harmonic
+
+pair_style lj/cut/tip4p/long 1 2 1 1 0.154600 12.5 12.0
+
+variable basename string TIP4P-2005_Implicit
+variable time string 1-5ns
+variable TK equal 298.15  # Set molecule temp
+variable PBAR equal 1.0  # Set pressure
+
+read_data	${basename}.lammpsdata
+
+pair_modify     tail yes
+kspace_style pppm/tip4p 1.0e-6
+
+pair_coeff    1    1      0.185207     3.158900  # O O
+pair_coeff    *    2      0.000000     0.000000  # Everything else 
+
+neighbor 2.0 bin
+neigh_modify    delay 0 every 1 check yes one 11330 page 200000
+timestep 1.0
+
+##Computes
+group WAT_O type 1
+compute O_msd WAT_O msd com yes 
+
+##Thermodyanamic Output
+thermo_style custom step ke pe etotal press vol temp density c_O_msd[4]
+thermo 10000                                            # Frequency of Thermodynamic Output
+thermo_modify flush yes
+
+##Minimization Section
+dump 1 all custom 10000 ${basename}_minimized.lammpstrj id x y z ix iy iz
+min_style       cg
+minimize        0.0 0.0 10000 100000
+undump 1
+reset_timestep  0
+
+##Molecular Dynamics Section (Equilibration)
+dump 0 all custom 10000 ${basename}_0-1ns_equilibration.lammpstrj id x y z ix iy iz	# Trajectory Output
+velocity all create 1 1111 dist gaussian				# generate initial velocities
+fix SHAKE all shake 1e-6 500 0 b 1 a 1
+fix 2 all nvt temp 1 ${TK} 100 			 			# molecular dynamics parameters
+restart 500000 restart.equil_${basename}					# Restart Output
+log log_${basename}_equil.lammps
+run 500000
+
+unfix 2
+fix 3 all nvt temp ${TK} ${TK} 100
+run 500000
+
+unfix 3
+restart 0
+undump 0
+
+## Data collection section
+dump 2 all custom 10000 ${basename}_${time}_equilibration.lammpstrj id x y z ix iy iz
+fix 4 all npt temp ${TK} ${TK} 100 iso ${PBAR} ${PBAR} 1000
+restart 500000 restart.${basename}
+log log_${basename}_${time}_equilibration.lammps
+run 5000000 upto
+ 
